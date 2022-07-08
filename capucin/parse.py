@@ -5,14 +5,14 @@ Created on Tue Jun 21 13:07:12 2022
 @author: lgauthier
 """
 
-import time
+import itertools
 
 import datetime
 import numpy as np
 import pandas as pd
 from copy import deepcopy
 
-from exceptions import ContinuousStatusExceptedFormatError
+from .exceptions import ContinuousStatusExceptedFormatError
 
 TIME_DELTA_BUFFER = 3900 # 65min
 
@@ -395,7 +395,7 @@ class ParkingSpotCollection:
 
     @property
     def days(self):
-        return np.unique(np.asarray([spot.days.keys() for k,spot in self.spots.items()]))
+        return np.unique(list(itertools.chain(*[spot.days.keys() for _, spot in parkings.spots.items()])))
 
     def get_obs(
         self,
@@ -511,13 +511,13 @@ if __name__ == '__main__':
     print('Observations :\n', capteurs_obs.head(10))
 
     capteurs_occ_moy = parkings.get_day_occ(
-        day=datetime.datetime(2021, 6, 17).date(),
+        day=datetime.datetime(2021, 6, 16).date(),
         filter_spot=['RB383', 'RB351']
     ) 
     print('Occupation moyenne :\n', capteurs_occ_moy.head(10))
     
     capteurs_occ_h = parkings.get_day_occ_h(
-        day=datetime.datetime(2021, 6, 17).date(),
+        day=datetime.datetime(2021, 6, 16).date(),
         filter_spot=['RB383', 'RB351']
     ) 
     print('Ocupation horraire :\n', capteurs_occ_h.head(10))
