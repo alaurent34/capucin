@@ -269,10 +269,13 @@ class SingleParkingSpot:
         for k in self.days.keys():
             self.days[k].process_observations(threshold=60)
 
-    def get_obs(self, day_start: str ='1970-01-01', day_end: str = '2099-12-31', hr_start: int = 0, hr_end: int = 24):
-        day_start = datetime.datetime.strptime(day_start, "%Y-%m-%d").date()
-        day_end = datetime.datetime.strptime(day_end, "%Y-%m-%d").date()
-
+    def get_obs(
+        self, 
+        day_start: datetime.datetime.date = datetime.datetime(1970,1,1).date(),
+        day_end: datetime.datetime.date = datetime.datetime(2099,12,31).date(),
+        hr_start: int = 0,
+        hr_end: int = 24
+    ):
         assert day_start <= day_end, 'day_start value cannot be bigger than day_end value'
 
         if min(self.days.keys()) > day_end or max(self.days.keys()) < day_start:
@@ -297,10 +300,13 @@ class SingleParkingSpot:
 
         return pd.concat(obs).reindex(columns=['date', 'start', 'end', 'observation'])
 
-    def get_occ(self, day_start: str ='1970-01-01', day_end: str = '2099-12-31', hr_start: int = 0, hr_end: int = 24):
-        day_start = datetime.datetime.strptime(day_start, "%Y-%m-%d").date()
-        day_end = datetime.datetime.strptime(day_end, "%Y-%m-%d").date()
-
+    def get_occ(
+        self, 
+        day_start: datetime.datetime.date = datetime.datetime(1970,1,1).date(),
+        day_end: datetime.datetime.date = datetime.datetime(2099,12,31).date(),
+        hr_start: int = 0,
+        hr_end: int = 24
+    ):
         assert day_start <= day_end, 'day_start value cannot be bigger than day_end value'
 
         if min(self.days.keys()) > day_end or max(self.days.keys()) < day_start:
@@ -325,10 +331,13 @@ class SingleParkingSpot:
         return pd.DataFrame(occ, columns=['date', 'occ'])
         
 
-    def get_occ_h(self, day_start: str ='1970-01-01', day_end: str = '2099-12-31', hr_start: int = 0, hr_end: int = 24):
-        day_start = datetime.datetime.strptime(day_start, "%Y-%m-%d").date()
-        day_end = datetime.datetime.strptime(day_end, "%Y-%m-%d").date()
-
+    def get_occ_h(
+        self, 
+        day_start: datetime.datetime.date = datetime.datetime(1970,1,1).date(),
+        day_end: datetime.datetime.date = datetime.datetime(2099,12,31).date(),
+        hr_start: int = 0,
+        hr_end: int = 24
+    ):
         assert day_start <= day_end, 'day_start value cannot be bigger than day_end value'
 
         if min(self.days.keys()) > day_end or max(self.days.keys()) < day_start:
@@ -393,7 +402,7 @@ class ParkingSpotCollection:
     def get_day_obs(self, day: datetime.datetime.date) -> pd.DataFrame:
         raw = []
         for spot_name, spot in self.spots.items():
-            spot_obs = spot.get_obs(day_start=day.strftime('%Y-%m-%d'), day_end=day.strftime('%Y-%m-%d'))
+            spot_obs = spot.get_obs(day_start=day, day_end=day)
             spot_obs['spot'] = spot_name
             raw.append(spot_obs)
 
@@ -403,7 +412,7 @@ class ParkingSpotCollection:
     def get_day_occ(self, day: datetime.datetime.date) -> pd.DataFrame:
         raw = []
         for spot_name, spot in self.spots.items():
-            spot_occ = spot.get_occ(day_start=day.strftime('%Y-%m-%d'), day_end=day.strftime('%Y-%m-%d'))
+            spot_occ = spot.get_occ(day_start=day, day_end=day)
             spot_occ['spot'] = spot_name
             raw.append(spot_occ)
 
@@ -413,7 +422,7 @@ class ParkingSpotCollection:
     def get_day_occ_h(self, day: datetime.datetime.date) -> pd.DataFrame:
         raw = []
         for spot_name, spot in self.spots.items():
-            spot_occ_h = spot.get_occ_h(day_start=day.strftime('%Y-%m-%d'), day_end=day.strftime('%Y-%m-%d'))
+            spot_occ_h = spot.get_occ_h(day_start=day, day_end=day)
             spot_occ_h['spot'] = spot_name
             raw.append(spot_occ_h)
 
@@ -426,7 +435,7 @@ if __name__ == '__main__':
     #TODO: CHARGEMENT ET TRAITEMENT DES TRANSACTIONS
 
     #import raw data
-    capteurs = pd.read_csv(r'./02_Intrants/Données de stationnement/donnees_capteurs_22jui22.csv')
+    capteurs = pd.read_csv(r'./preprocessing/output/donnees_capteurs_7jul22.csv')
     cols_capteurs = {'DH_Date_Observation': 'timestamp', 'No_Place':'spot_id', 'Valeur_Observee':'obs'}
     capteurs_value = {'Occupé':1, 'Libre':0, 'Inconnu':-2}
 
