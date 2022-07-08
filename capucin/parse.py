@@ -397,37 +397,95 @@ class ParkingSpotCollection:
     def days(self):
         return np.unique(np.asarray([spot.days.keys() for k,spot in self.spots.items()]))
 
-    #@overload(get_day_rawdata)
-
-    def get_day_obs(self, day: datetime.datetime.date) -> pd.DataFrame:
+    def get_obs(
+        self,
+        day_start: datetime.datetime.date,
+        day_end: datetime.datetime.date,
+        filter_spot: list = []
+    ) -> pd.DataFrame:
+        """ TODO
+        """
         raw = []
         for spot_name, spot in self.spots.items():
-            spot_obs = spot.get_obs(day_start=day, day_end=day)
+            # filter
+            if filter_spot and spot_name not in filter_spot:
+                continue
+
+            spot_obs = spot.get_obs(day_start=day_start, day_end=day_end)
             spot_obs['spot'] = spot_name
             raw.append(spot_obs)
 
 
         return pd.concat(raw).reindex(columns=['spot', 'date', 'start', 'end', 'observation'])
 
-    def get_day_occ(self, day: datetime.datetime.date) -> pd.DataFrame:
-        raw = []
+    def get_occ(
+        self,
+        day_start: datetime.datetime.date,
+        day_end: datetime.datetime.date,
+        filter_spot: list = []
+    ) -> pd.DataFrame:
+        """TODO
+        """
+        occ = []
         for spot_name, spot in self.spots.items():
-            spot_occ = spot.get_occ(day_start=day, day_end=day)
+            # filter
+            if filter_spot and spot_name not in filter_spot:
+                continue
+
+            spot_occ = spot.get_occ(day_start=day_start, day_end=day_end)
             spot_occ['spot'] = spot_name
-            raw.append(spot_occ)
+            occ.append(spot_occ)
 
 
-        return pd.concat(raw).reindex(columns=['spot', 'date', 'occ'])
+        return pd.concat(occ).reindex(columns=['spot', 'date', 'occ'])
 
-    def get_day_occ_h(self, day: datetime.datetime.date) -> pd.DataFrame:
-        raw = []
+    def get_occ_h(
+        self,
+        day_start: datetime.datetime.date,
+        day_end: datetime.datetime.date,
+        filter_spot: list = []
+    ) -> pd.DataFrame:
+        """TODO
+        """
+        occ_h = []
         for spot_name, spot in self.spots.items():
-            spot_occ_h = spot.get_occ_h(day_start=day, day_end=day)
-            spot_occ_h['spot'] = spot_name
-            raw.append(spot_occ_h)
+            # filter
+            if filter_spot and spot_name not in filter_spot:
+                continue
+
+            spot_occ = spot.get_occ_h(day_start=day_start, day_end=day_end)
+            spot_occ['spot'] = spot_name
+            occ_h.append(spot_occ)
 
 
-        return pd.concat(raw).reindex(columns=['spot', 'date', 'hour', 'occ'])
+        return pd.concat(occ_h).reindex(columns=['spot', 'date', 'occ'])
+
+    def get_day_obs(
+        self,
+        day: datetime.datetime.date,
+        filter_spot: list = []
+    ) -> pd.DataFrame:
+        """ TODO
+        """
+        return self.get_obs(day_start=day, day_end=day, filter_spot=filter_spot)
+
+    def get_day_occ(
+        self,
+        day: datetime.datetime.date,
+        filter_spot: list = []
+    ) -> pd.DataFrame:
+        """ TODO
+        """
+        return self.get_occ(day_start=day, day_end=day, filter_spot=filter_spot)
+
+    def get_day_occ_h(
+        self,
+        day: datetime.datetime.date,
+        filter_spot: list = []
+    ) -> pd.DataFrame:
+        """ TODO
+        """
+        return self.get_occ_h(day_start=day, day_end=day, filter_spot=filter_spot)
 
 
 
@@ -446,11 +504,20 @@ if __name__ == '__main__':
     parkings = ParkingSpotCollection()
     parkings.read_ping_data(capteurs.iloc[:5000], columns_conf=cols_capteurs, obs_conf=capteurs_value)
 
-    capteurs_obs = parkings.get_day_obs(day=datetime.datetime(2021, 6, 17).date())
+    capteurs_obs = parkings.get_day_obs(
+        day=datetime.datetime(2021, 6, 16).date(),
+        filter_spot=['RB383', 'RB351']
+    )
     print('Observations :\n', capteurs_obs.head(10))
 
-    capteurs_occ_moy = parkings.get_day_occ(day=datetime.datetime(2021, 6, 17).date()) 
+    capteurs_occ_moy = parkings.get_day_occ(
+        day=datetime.datetime(2021, 6, 17).date(),
+        filter_spot=['RB383', 'RB351']
+    ) 
     print('Occupation moyenne :\n', capteurs_occ_moy.head(10))
     
-    capteurs_occ_h = parkings.get_day_occ_h(day=datetime.datetime(2021, 6, 17).date()) 
+    capteurs_occ_h = parkings.get_day_occ_h(
+        day=datetime.datetime(2021, 6, 17).date(),
+        filter_spot=['RB383', 'RB351']
+    ) 
     print('Ocupation horraire :\n', capteurs_occ_h.head(10))
