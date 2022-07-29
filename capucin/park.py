@@ -57,6 +57,10 @@ class ContinuousStatus:
 
     def get_obs(self, hr_start: int = 0, hr_end: int = 24) -> pd.DataFrame:
         occ_obs = self._occ_obs
+
+        if not occ_obs:
+            return pd.DataFrame(columns=['start', 'end', 'observation'])
+
         data = pd.DataFrame(np.concatenate([np.insert(occ_obs[x], 2, x, axis=1) for x in occ_obs.keys() if occ_obs[x]]), columns=['start', 'end', 'observation'])
 
         start = hr_start*3600
@@ -216,6 +220,13 @@ class PingStatus(ContinuousStatus):
             self._occ_obs[1] = [(s, e) for s,e in tmp if e - s >= threshold]
         except KeyError:
             pass
+
+    def _clean_empty_data(self) -> None:
+        occ_obs = self._occ_obs
+        
+        occ_obs_cleaned = {k: v for k, v in occ_obs.items() if v}
+
+        self._occ_obs = occ_obs_cleaned
         
     def process_observations(self, threshold=60) -> None:
         ''' Complete all the stages requiered to transform occupancy data to 
@@ -241,6 +252,8 @@ class PingStatus(ContinuousStatus):
             self._remove_noize_status(threshold=threshold)
         except ContinuousStatusExceptedFormatError as e:
             raise e
+
+        self._clean_empty_data()
 
 class TransactionsStatus(ContinuousStatus):
     pass
@@ -282,7 +295,7 @@ class SingleParkingSpot:
             return pd.DataFrame()
         
         day_start = max(day_start, min(self.days.keys()))
-        day_end = min(day_start, max(self.days.keys()))
+        day_end = min(day_end, max(self.days.keys()))
         delta = datetime.timedelta(days=1)
 
         obs = []
@@ -313,7 +326,7 @@ class SingleParkingSpot:
             return pd.DataFrame()
 
         day_start = max(day_start, min(self.days.keys()))
-        day_end = min(day_start, max(self.days.keys()))
+        day_end = min(day_end, max(self.days.keys()))
         delta = datetime.timedelta(days=1)
 
         occ = []
@@ -344,7 +357,7 @@ class SingleParkingSpot:
             return pd.DataFrame()
 
         day_start = max(day_start, min(self.days.keys()))
-        day_end = min(day_start, max(self.days.keys()))
+        day_end = min(day_end, max(self.days.keys()))
         delta = datetime.timedelta(days=1)
 
         occ_h = []
@@ -399,8 +412,10 @@ class ParkingSpotCollection:
 
     def get_obs(
         self,
-        day_start: datetime.datetime.date,
-        day_end: datetime.datetime.date,
+        day_start: datetime.datetime.date = datetime.datetime(1970, 1, 1).date(),
+        day_end: datetime.datetime.date = datetime.datetime(2099, 12, 31).date(),
+        hr_start: int = 0,
+        hr_end: int = 24,
         filter_spot: list = []
     ) -> pd.DataFrame:
         """ TODO
@@ -411,17 +426,22 @@ class ParkingSpotCollection:
             if filter_spot and spot_name not in filter_spot:
                 continue
 
-            spot_obs = spot.get_obs(day_start=day_start, day_end=day_end)
+            spot_obs = spot.get_obs(day_start=day_start, day_end=day_end,
+                hr_start=hr_start, hr_end=hr_end)
             spot_obs['spot'] = spot_name
             raw.append(spot_obs)
 
+        data = pd.concat(raw).reindex(columns=['spot', 'date', 'start', 'end', 'observation']) 
+        data.date = data.date.astype(np.datetime64)
 
-        return pd.concat(raw).reindex(columns=['spot', 'date', 'start', 'end', 'observation'])
+        return data
 
     def get_occ(
         self,
-        day_start: datetime.datetime.date,
-        day_end: datetime.datetime.date,
+        day_start: datetime.datetime.date = datetime.datetime(1970, 1, 1).date(),
+        day_end: datetime.datetime.date = datetime.datetime(2099, 12, 31).date(),
+        hr_start: int = 0,
+        hr_end: int = 24,
         filter_spot: list = []
     ) -> pd.DataFrame:
         """TODO
@@ -429,23 +449,28 @@ class ParkingSpotCollection:
         occ = []
         for spot_name, spot in self.spots.items():
             # filter
-            if filter_spot and spot_name not in filter_spot:
+            if filter_spot and (spot_name not in filter_spot):
                 continue
 
-            spot_occ = spot.get_occ(day_start=day_start, day_end=day_end)
+            spot_occ = spot.get_occ(day_start=day_start, day_end=day_end,
+                hr_start=hr_start, hr_end=hr_end)
             spot_occ['spot'] = spot_name
             occ.append(spot_occ)
 
+        data = pd.concat(occ).reindex(columns=['spot', 'date', 'occ'])
+        data.date = data.date.astype(np.datetime64)
 
-        return pd.concat(occ).reindex(columns=['spot', 'date', 'occ'])
+        return data
 
     def get_occ_h(
         self,
-        day_start: datetime.datetime.date,
-        day_end: datetime.datetime.date,
+        day_start: datetime.datetime.date = datetime.datetime(1970, 1, 1).date(),
+        day_end: datetime.datetime.date = datetime.datetime(2099, 12, 31).date(),
+        hr_start: int = 0,
+        hr_end: int = 24,
         filter_spot: list = []
     ) -> pd.DataFrame:
-        """TODO
+        """TODO: faire passer les heures dans la fonction : sinon toute la journée par défaut.
         """
         occ_h = []
         for spot_name, spot in self.spots.items():
@@ -453,39 +478,51 @@ class ParkingSpotCollection:
             if filter_spot and spot_name not in filter_spot:
                 continue
 
-            spot_occ = spot.get_occ_h(day_start=day_start, day_end=day_end)
+            spot_occ = spot.get_occ_h(day_start=day_start, day_end=day_end,
+                hr_start=hr_start, hr_end=hr_end)
             spot_occ['spot'] = spot_name
             occ_h.append(spot_occ)
 
+        data = pd.concat(occ_h).reindex(columns=['spot', 'date', 'hour', 'occ'])
+        data.date = data.date.astype(np.datetime64)
 
-        return pd.concat(occ_h).reindex(columns=['spot', 'date', 'occ'])
+        return data
 
     def get_day_obs(
         self,
         day: datetime.datetime.date,
+        hr_start: int = 0,
+        hr_end: int = 24,
         filter_spot: list = []
     ) -> pd.DataFrame:
         """ TODO
         """
-        return self.get_obs(day_start=day, day_end=day, filter_spot=filter_spot)
+        return self.get_obs(day_start=day, day_end=day, filter_spot=filter_spot,
+                            hr_start=hr_start, hr_end=hr_end)
 
     def get_day_occ(
         self,
         day: datetime.datetime.date,
+        hr_start: int = 0,
+        hr_end: int = 24,
         filter_spot: list = []
     ) -> pd.DataFrame:
         """ TODO
         """
-        return self.get_occ(day_start=day, day_end=day, filter_spot=filter_spot)
+        return self.get_occ(day_start=day, day_end=day, filter_spot=filter_spot,
+                            hr_start=hr_start, hr_end=hr_end)
 
     def get_day_occ_h(
         self,
         day: datetime.datetime.date,
+        hr_start: int = 0,
+        hr_end: int = 24,
         filter_spot: list = []
     ) -> pd.DataFrame:
         """ TODO
         """
-        return self.get_occ_h(day_start=day, day_end=day, filter_spot=filter_spot)
+        return self.get_occ_h(day_start=day, day_end=day, filter_spot=filter_spot,
+                              hr_start=hr_start, hr_end=hr_end)
 
 
 
