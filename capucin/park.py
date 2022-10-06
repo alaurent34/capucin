@@ -200,6 +200,7 @@ class PingStatus(ContinuousStatus):
             end = actual_obs[i, 2]
             if actual_obs[i, 3] == -2: # Next observation is unknown
                 end -= 3600
+                actual_obs[i+1, 0] -= 3600
             if pd.isna(actual_obs[i, 2]): # end of the day
                 end = 23 * 3600 + 59 * 60 + 59
             try:
@@ -588,12 +589,14 @@ class SingleParkingSpot:
             if date_st.date() in list(self.trsc.keys()) and event['observation'] == 1:
                 event_cp = event.copy()
 
-                _, has_paid, time_paid = self.trsc[date_st.date()].get_event_paid(date_st, date_end)
+                ids_trscs, has_paid, time_paid = self.trsc[date_st.date()].get_event_paid(date_st, date_end)
+                event_cp['first_trsc'] = ids_trscs[0] if ids_trscs else -2
                 event_cp['has_paid'] = has_paid
                 event_cp['sec_paid'] = time_paid
                 matched.append(event_cp)
             else:
                 event_cp = event.copy()
+                event_cp['first_trsc'] = -2
                 event_cp['has_paid'] = False
                 event_cp['sec_paid'] = 0
                 matched.append(event_cp)
@@ -692,9 +695,10 @@ class SingleParkingSpot:
                 matched.append(event_cp)
         
         df = pd.DataFrame(matched)#, obs_old, obs_permits, obs_regulation
+        df = df[["event_id", "date", "start", "end", "observation",	"has_permits",
+                 "regulated", "prohibited", "unknown", "has_been_paid", "id_trsc",
+                 "has_paid", "first_trsc", "sec_paid"]] 
 
-        # Compute seconds paid 2 times
-        
         return df
 
     def get_obs(
@@ -995,6 +999,9 @@ class ParkingSpotCollection:
 
         data = pd.concat(raw)
         data.date = data.date.astype(np.datetime64)
+        data = data[["spot", "event_id", "date", "start", "end", "observation",	"has_permits",
+                     "regulated", "prohibited", "unknown", "has_been_paid", "id_trsc",
+                     "has_paid", "first_trsc", "sec_paid"]] 
 
         return data
 
@@ -1136,7 +1143,7 @@ if __name__ == '__main__':
     parkings.read_permits_data(perms)
 
     matched_obs = parkings.get_match_obs()
-    matched_obs.to_csv('matched_obs_v3.csv', index=False)
+    matched_obs.to_csv('matched_obs_v4.csv', index=False)
 
     capteurs_obs = parkings.get_day_obs(
         day=datetime.datetime(2021, 6, 16).date(),
