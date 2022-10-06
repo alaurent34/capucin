@@ -147,12 +147,12 @@ SQL_REGLEMENT = '''
     from    MinPriorite;
 
     --reglement terrain
-    Select        R.No_Place_Terrain                                                                                 as No_Place
-    ,            '{date}'                                                                                            as DateRegl
+    Select       R.No_Place_Terrain                                                                                 as No_Place
+    ,            '{date}'                                                                                           as DateRegl
     ,            R.DebutReglement
     ,            R.FinReglement        
     ,            case when Ind_Interdiction = 'Permis' then 0 else 1 end                                            as Interdiction
-    ,            'Terrain'                                                                                            as TypeReglement
+    ,            'Terrain'                                                                                          as TypeReglement
     into        ##ReglementApplicable
     from        ##EchantillonReglement R
     inner join    ##ReglprioriteMin      P    on P.No_Place_Terrain = R.No_Place_Terrain and P.Priorite_Regl_Min = R.Priorite_Regl 
@@ -160,12 +160,12 @@ SQL_REGLEMENT = '''
 
     --reglement place
     insert into ##ReglementApplicable
-    Select        R.No_Place_Terrain                                                                                         as No_Place
-    ,            '{date}'                                                                                                    as DateRegl
+    Select       R.No_Place_Terrain                                                                                         as No_Place
+    ,            '{date}'                                                                                                   as DateRegl
     ,            R.DebutReglement
     ,            R.FinReglement        
     ,            case when Ind_Interdiction = 'Permis' then 0 else 1 end                                                    as Interdiction
-    ,            'Place'                                                                                                        as TypeReglement
+    ,            'Place'                                                                                                    as TypeReglement
     from        ##EchantillonReglement R
     inner join    ##ReglprioriteMin      P    on P.No_Place_Terrain = R.No_Place_Terrain and P.Priorite_Regl_Min = R.Priorite_Regl 
     where        R.No_Place_Terrain not in (select No_place from dbo.D_Place where SK_D_Terrain > 0 and '{date}' between MD_Dt_Effectif AND MD_Dt_Expir);
