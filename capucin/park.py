@@ -5,16 +5,18 @@ Created on Tue Jun 21 13:07:12 2022
 @author: lgauthier
 """
 
-import itertools
-
+import os
 import datetime
-from re import search
+import itertools
+from re import I, search
 from time import time
 from turtle import st
+
 import numpy as np
 import pandas as pd
 import pandasql as ps
 from copy import deepcopy
+from tqdm import tqdm
 
 from .exceptions import ContinuousStatusExceptedFormatError
 
@@ -124,9 +126,11 @@ class PingStatus(ContinuousStatus):
         #add the end point so we can treat between last seen and end of day
         items.append((end, 'PLACEHOLDER'))
 
-        for pos in range(1, len(items)):
+        pos = 1
+        while pos < len(items):
             if (items[pos][0] - items[pos-1][0]).total_seconds() > TIME_DELTA_BUFFER: # 65min
                 items.insert(pos, (datetime.timedelta(seconds=TIME_DELTA_BUFFER) + items[pos-1][0], -2))
+            pos+=1
 
         #find the status of start
         if (items[0][0] - start).total_seconds()  > TIME_DELTA_BUFFER:
@@ -279,7 +283,12 @@ class PingStatus(ContinuousStatus):
         -----
         ContinuousStatusExceptedFormatError: Exception
         '''
+        #if datetime.date(self.yy, self.mm, self.dd) == datetime.date(2021, 6, 17):
+            #print(self._occ_obs)
+            #print('--------')
         self._create_unknown_status()
+        #if datetime.date(self.yy, self.mm, self.dd) == datetime.date(2021, 6, 17):
+            #print(self._occ_obs)
         self._remove_duplicate_status()
         self._remove_noize_status(threshold=threshold)
         self._transform_observation()
@@ -1119,6 +1128,45 @@ class ParkingSpotCollection:
         return self.get_occ_h(day_start=day, day_end=day, filter_spot=filter_spot,
                               hr_start=hr_start, hr_end=hr_end)
 
+def get_obs_btwn_hr(df, hr_start, hr_end):
+    return df[(df.hr_start <= hr_start) & (df.hr_end >= hr_end)].copy()
+
+def get_obs_hr(df, hr):
+    return get_obs_btwn_hr(df, hr, hr+1)
+
+def compute_all_metrics(df, col='regulated'):
+    # General time
+    total_time    = df[df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[df[col]].empty else 0
+    time_unknown  = df[(df.observation == -2) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == -2) & df[col]].empty else 0
+    time_occupied = df[(df.observation == 1) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 1) & df[col]].empty else 0
+    time_vacant   = df[(df.observation == 0) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 0) & df[col]].empty else 0
+    
+    # time been paid regardless of which vehicule paid
+    occupied_paid_tot       = df[(df.observation == 1) & df.has_been_paid & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 1) & df.has_been_paid & df[col]].empty else 0
+    occupied_paid_by_others = df[(df.observation == 1) & df.has_been_paid & ~df.has_paid & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 1) & df.has_been_paid & ~df.has_paid & df[col]].empty else 0
+    occupied_paid_by_self   = df[(df.observation == 1) & df.has_been_paid & df.has_paid & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 1) & df.has_been_paid & df.has_paid & df[col]].empty else 0
+    occupied_not_paid       = df[(df.observation == 1) & ~df.has_been_paid & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 1) & ~df.has_been_paid & df[col]].empty else 0
+    vacant_paid             = df[(df.observation == 0) & df.has_been_paid & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 0) & df.has_been_paid & df[col]].empty else 0
+
+    # time paid by vehicule
+    event_paid                       = df[(df.observation == 1) & df.has_paid & df[col]].event_id.unique()
+    nb_veh_paid                      = event_paid.size
+    mean_time_stayed_by_veh_paid     = df.loc[df.event_id.isin(event_paid) & df[col]].groupby('event_id')[['start', 'end']].apply(lambda x: x.end.max() - x.start.min()).mean() if event_paid.size > 0 else np.nan
+    mean_time_paid_by_veh_paid       = df.loc[df.event_id.isin(event_paid) & df[col]].groupby('event_id').first().sec_paid.mean() if event_paid.size > 0 else np.nan
+    # time not paid by vehicule
+    event_not_paid                   = df[(df.observation == 1) & ~df.has_paid & df[col]].event_id.unique()
+    nb_veh_not_paid                  = event_not_paid.size
+    mean_time_stayed_by_veh_not_paid = df.loc[df.event_id.isin(event_not_paid) & df[col]].groupby('event_id')[['start', 'end']].apply(lambda x: x.end.max() - x.start.min()).mean() if event_not_paid.size > 0 else np.nan
+
+    # simultaneous transactions    
+    time_simultaneous = df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].empty else np.nan
+    simutaneous_trsc  = df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].apply(lambda x: len(x.id_trsc), axis=1).mean() if not df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].empty else np.nan
+
+    return total_time, time_unknown, time_occupied, time_vacant, \
+           occupied_paid_tot, occupied_paid_by_others, occupied_paid_by_self, occupied_not_paid, vacant_paid,\
+           nb_veh_paid, mean_time_stayed_by_veh_paid, mean_time_paid_by_veh_paid,\
+           nb_veh_not_paid, mean_time_stayed_by_veh_not_paid,\
+           time_simultaneous, simutaneous_trsc
 
 
 if __name__ == '__main__':
@@ -1142,23 +1190,91 @@ if __name__ == '__main__':
     parkings.read_reglement_data(regls)
     parkings.read_permits_data(perms)
 
-    matched_obs = parkings.get_match_obs()
-    matched_obs.to_csv('matched_obs_v4.csv', index=False)
+    # Get analysis file
+    try:
+        matched_obs = pd.read_csv('./cache/matched_obs.csv')
+    except FileNotFoundError:
+        matched_obs = parkings.get_match_obs()
+        os.makedirs('./cache/', exist_ok=True)
+        matched_obs.to_csv('./cache/matched_obs.csv', index=False)
 
-    capteurs_obs = parkings.get_day_obs(
-        day=datetime.datetime(2021, 6, 16).date(),
-        filter_spot=['RB383', 'RB351']
-    )
-    print('Observations :\n', capteurs_obs.head(5))
-
-    capteurs_occ_moy = parkings.get_day_occ(
-        day=datetime.datetime(2021, 6, 16).date(),
-        filter_spot=['RB383', 'RB351']
-    ) 
-    print('Occupation moyenne :\n', capteurs_occ_moy.head(5))
     
-    capteurs_occ_h = parkings.get_day_occ_h(
-        day=datetime.datetime(2021, 6, 16).date(),
-        filter_spot=['RB383', 'RB351']
-    ) 
-    print('Ocupation horraire :\n', capteurs_occ_h.head(5))
+    # Analysis
+    
+    ## Adding some derivated variables
+    matched_obs['season']   = matched_obs.date.dt.month%12 // 3 + 1
+    matched_obs['hr_start'] = matched_obs.start // 3600
+    matched_obs['hr_end']   = matched_obs.end // 3600
+    matched_obs['all']      = True
+    matched_obs.id_trsc     = matched_obs.id_trsc.apply(eval)
+
+    ## Transform data for analysis
+    matched_obs.rename(columns={'regulated':'fee','unknown': 'no_fee'}, inplace=True)
+    grps = matched_obs.groupby(['date', 'spot'])
+    categories = ['fee', 'prohibited', 'no_fee', 'all']
+
+    results = []
+    for idx, data in tqdm(grps):
+        for cat in categories :
+            row = []
+            row.extend(idx)
+            row.append(cat)
+            
+
+            total_time, time_unknown, time_occupied, time_vacant, \
+            occupied_paid_tot, occupied_paid_by_others, occupied_paid_by_self, occupied_not_paid, vacant_paid,\
+            nb_veh_paid, mean_time_stayed_by_veh_paid, mean_time_paid_by_veh_paid,\
+            nb_veh_not_paid, mean_time_stayed_by_veh_not_paid,\
+            time_simultaneous, simutaneous_trsc = compute_all_metrics(data, col=cat)
+            
+            row.extend((
+            total_time, time_unknown, time_occupied, time_vacant, \
+            occupied_paid_tot, occupied_paid_by_others, occupied_paid_by_self, occupied_not_paid, vacant_paid,\
+            nb_veh_paid, mean_time_stayed_by_veh_paid, mean_time_paid_by_veh_paid,\
+            nb_veh_not_paid, mean_time_stayed_by_veh_not_paid,\
+            time_simultaneous, simutaneous_trsc
+            ))
+            results.append(row)
+            
+    res = pd.DataFrame(
+        results,
+        columns=[
+            'date', 'spot', 'time_category',
+            'total_time', 'time_unknown', 'time_occupied', 'time_vacant',
+            'occupied_paid_tot', 'occupied_paid_by_others', 'occupied_paid_by_self', 'occupied_not_paid', 'vacant_paid',
+            'nb_veh_paid', 'mean_time_stayed_by_veh_paid', 'mean_time_paid_by_veh_paid',
+            'nb_veh_not_paid', 'mean_time_stayed_by_veh_not_paid',
+            'time_simultaneous', 'simutaneous_trsc'
+        ]
+    )
+
+    ## Join with sensor and spot categories
+    # Get sensors type
+    sensor_type = pd.read_excel(
+        "./../../../02_Intrants/RD_Agence_Evaluation_Qualite_Capteur_2022-08-15/RD-0010-Stats.xlsx", 
+        sheet_name='Data',
+        header=5,
+        usecols='A:B',
+        names=['spot', 'sensor_type']
+        ).dropna()
+    # Get spot type
+    spot_type = (
+        trans[['SK_D_Terrain', 'No_Place']]
+            .replace(-2, 'Sur-Rue')
+            .replace(295, 'Terrain 191')
+            .drop_duplicates()
+            .rename(columns={'No_Place':'spot', 'SK_D_Terrain':'spot_type'})
+            .set_index('spot')
+    )
+    # Join them
+    res = res.join(sensor_type.set_index('spot'), on='spot', how='left')
+    res.loc[res.sensor_type.isna(), 'sensor_type'] = 'eleven'
+    res = res.join(spot_type, on='spot', how='left')
+
+    ## Add some time derivated columns
+    res['season'] = res.date.dt.month%12 // 3 + 1
+    res['period'] = ['week-end' if x in [5,6] else 'week-day' for x in res.date.dt.day_of_week]
+
+    ## Produce final file for analysis
+    os.makedirs('results/', exist_ok=True)
+    res.to_excel('results/spots_generic_stats.xlsx')
