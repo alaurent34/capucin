@@ -1140,6 +1140,7 @@ def compute_all_metrics(df, col='regulated'):
     time_unknown  = df[(df.observation == -2) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == -2) & df[col]].empty else 0
     time_occupied = df[(df.observation == 1) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 1) & df[col]].empty else 0
     time_vacant   = df[(df.observation == 0) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 0) & df[col]].empty else 0
+    time_paid     = df[df.has_been_paid & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[df.has_been_paid & df[col]].empty else 0
     
     # time been paid regardless of which vehicule paid
     occupied_paid_tot       = df[(df.observation == 1) & df.has_been_paid & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[(df.observation == 1) & df.has_been_paid & df[col]].empty else 0
@@ -1162,12 +1163,41 @@ def compute_all_metrics(df, col='regulated'):
     time_simultaneous = df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].apply(lambda x: x.end - x.start, axis=1).sum() if not df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].empty else np.nan
     simutaneous_trsc  = df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].apply(lambda x: len(x.id_trsc), axis=1).mean() if not df[df.id_trsc.apply(lambda x: False if x == -2 else len(x)>1) & df[col]].empty else np.nan
 
-    return total_time, time_unknown, time_occupied, time_vacant, \
+    return total_time, time_unknown, time_occupied, time_vacant, time_paid,\
            occupied_paid_tot, occupied_paid_by_others, occupied_paid_by_self, occupied_not_paid, vacant_paid,\
            nb_veh_paid, mean_time_stayed_by_veh_paid, mean_time_paid_by_veh_paid,\
            nb_veh_not_paid, mean_time_stayed_by_veh_not_paid,\
            time_simultaneous, simutaneous_trsc
 
+def hour_metrics(data, hr_start=0, hr_end=24, spot=None, date=None):
+    res = []
+    while hr_start < hr_end:
+        data_hr = data[(data.start < (hr_start+1)*3600) & (data.end > hr_start*3600) & data.regulated].copy()
+        data_hr.loc[data_hr.start < hr_start*3600, 'start'] = hr_start * 3600
+        data_hr.loc[data_hr.end > (hr_start+1)*3600, 'end'] = (hr_start + 1) * 3600
+
+        if data_hr.empty:
+            hr_start += 1
+            continue
+
+        tmp = dict(zip(
+            ['total_time', 'time_unknown', 'time_occupied', 'time_vacant', 'time_paid',
+            'occupied_paid_tot', 'occupied_paid_by_others', 'occupied_paid_by_self', 'occupied_not_paid', 'vacant_paid',
+            'nb_veh_paid', 'mean_time_stayed_by_veh_paid', 'mean_time_paid_by_veh_paid',
+            'nb_veh_not_paid', 'mean_time_stayed_by_veh_not_paid',
+            'time_simultaneous', 'simutaneous_trsc'],
+            compute_all_metrics(data_hr, col='regulated')
+        ))
+        tmp['hour'] = hr_start
+        if spot:
+            tmp['spot'] = spot
+        if date:
+            tmp['date'] = date
+        res.append(tmp)
+
+        hr_start += 1
+
+    return res
 
 if __name__ == '__main__':
 
@@ -1221,14 +1251,14 @@ if __name__ == '__main__':
             row.append(cat)
             
 
-            total_time, time_unknown, time_occupied, time_vacant, \
+            total_time, time_unknown, time_occupied, time_vacant, time_paid,\
             occupied_paid_tot, occupied_paid_by_others, occupied_paid_by_self, occupied_not_paid, vacant_paid,\
             nb_veh_paid, mean_time_stayed_by_veh_paid, mean_time_paid_by_veh_paid,\
             nb_veh_not_paid, mean_time_stayed_by_veh_not_paid,\
             time_simultaneous, simutaneous_trsc = compute_all_metrics(data, col=cat)
             
             row.extend((
-            total_time, time_unknown, time_occupied, time_vacant, \
+            total_time, time_unknown, time_occupied, time_vacant, time_paid,\
             occupied_paid_tot, occupied_paid_by_others, occupied_paid_by_self, occupied_not_paid, vacant_paid,\
             nb_veh_paid, mean_time_stayed_by_veh_paid, mean_time_paid_by_veh_paid,\
             nb_veh_not_paid, mean_time_stayed_by_veh_not_paid,\
@@ -1240,7 +1270,7 @@ if __name__ == '__main__':
         results,
         columns=[
             'date', 'spot', 'time_category',
-            'total_time', 'time_unknown', 'time_occupied', 'time_vacant',
+            'total_time', 'time_unknown', 'time_occupied', 'time_vacant', 'time_paid',
             'occupied_paid_tot', 'occupied_paid_by_others', 'occupied_paid_by_self', 'occupied_not_paid', 'vacant_paid',
             'nb_veh_paid', 'mean_time_stayed_by_veh_paid', 'mean_time_paid_by_veh_paid',
             'nb_veh_not_paid', 'mean_time_stayed_by_veh_not_paid',
