@@ -28,6 +28,58 @@ AXES_CONNECTOR = {
     'database':'Axes'
 }
 
+def get_all_sensors_data():
+    con_cptr = pymssql.connect(**CPTR_CONNECTOR)
+    sql_capt = f"""
+    SELECT 
+        SK_D_Place,
+        CASE WHEN F.No_Place LIKE 'COMMUNAUTO-%' THEN R.No_Place
+             ELSE F.No_Place
+        END AS No_Place,
+        Type_Observation,
+        Valeur_Observee,
+        Unite_Observation,
+        DH_Date_Observation
+    FROM dbo.F_ActiviteCapteursPilotThings F
+    LEFT JOIN dbo.F_rel_Place_VLS R ON R.No_Place_vls = F.No_Place
+    WHERE Type_Observation = 'Stationnement'
+    """
+    try:
+        capteurs = pd.read_csv('./output/donnees_capteurs_7jul22.csv')
+        capteurs.DH_Date_Observation = pd.to_datetime(capteurs.DH_Date_Observation)
+    except FileNotFoundError:
+        capteurs = pd.read_sql(con=con_cptr, sql=sql_capt)
+
+    date_min = capteurs.DH_Date_Observation.min()
+    date_max = capteurs.DH_Date_Observation.max()
+
+    return capteurs, date_min, date_max
+
+def get_places(no_place_list=[], where_cond=""):
+    con_axes = pymssql.connect(**AXES_CONNECTOR)
+
+    sql_places = f"""
+    SELECT DISTINCT
+          [No_Place],
+          [Latitude],
+          [Longitude]
+    FROM [dbo].[D_Place]
+    WHERE 1=1
+    """
+    sql_places += f"""
+    AND No_Place IN {tuple(no_place_list)}
+    """ if no_place_list else ""
+
+    sql_places += f""""
+    AND {where_cond}
+    """ if where_cond else ""
+
+    places = pd.read_sql(con=con_axes, sql=sql_places)
+    places = places.groupby('No_Place').first().reset_index()
+
+    return places
+
+
 def main():
 
     # Recupération des données de capteurs
